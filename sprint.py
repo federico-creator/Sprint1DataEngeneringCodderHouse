@@ -88,7 +88,7 @@ def get_data():
 #esta función genera el bucle
 def process_data():
     crypto_data = get_data()
-    current_datetime = datetime.now().strftime("%Y-%m-%d %H") # se obtiene solo la hora ahora, y que la info se solicita cada 3 horas, si esto se eliminase y se hiciese por día, se eliminaria el %H
+    current_datetime = datetime.now().strftime("%Y-%m-%d") # se obtiene solo el día, ya que la info se solicita cada 3 horas, esto hace que el dato del día se actualice cada 3 horas
     crypto_list = []
     for crypto in crypto_data:
         crypto_info = {
@@ -138,10 +138,22 @@ def cargar_datos(df):
 
     try:
         with conn.cursor() as cur:
+            # Se intento hacer con un  UPDATE pero no funciono, asi que lo que hace el codigo es eliminar todos los registros con misma Fecah y simbolo, y cargar el nuevo con los valores actualizados
             execute_values(
                 cur,
-                # Al insert anterior le agregamos el conflict si hay un Simbolo y hora igual, que lo que hace es cargar los datos más nuevos, sobreescribiendo los viejos. El ID queda igual.
-                '''
+                """
+                DELETE FROM crypto_data
+                WHERE (Symbol, DateTime) IN (
+                    %s
+                );
+                """,
+                [(row[1], row[16]) for row in df.itertuples(index=False, name=None)],
+                page_size=len(df)
+            )
+
+            execute_values(
+                cur,
+                """
                 INSERT INTO crypto_data (
                     ID,Symbol, Name, Current_Price, Market_Cap,
                     Total_Volume, High_24h, Low_24h, Price_Change_24h,
@@ -150,26 +162,11 @@ def cargar_datos(df):
                     Total_Supply, Ath, Ath_Change_Percentage,
                     DateTime
                 ) VALUES %s
-                ON CONFLICT (Symbol, DateTime)
-                DO UPDATE SET
-                    Name = EXCLUDED.Name,
-                    Current_Price = EXCLUDED.Current_Price,
-                    Market_Cap = EXCLUDED.Market_Cap,
-                    Total_Volume = EXCLUDED.Total_Volume,
-                    High_24h = EXCLUDED.High_24h,
-                    Low_24h = EXCLUDED.Low_24h,
-                    Price_Change_24h = EXCLUDED.Price_Change_24h,
-                    Price_Change_Percentage_24h = EXCLUDED.Price_Change_Percentage_24h,
-                    Market_Cap_Change_24h = EXCLUDED.Market_Cap_Change_24h,
-                    Market_Cap_Change_Percentage_24h = EXCLUDED.Market_Cap_Change_Percentage_24h,
-                    Circulating_Supply = EXCLUDED.Circulating_Supply,
-                    Total_Supply = EXCLUDED.Total_Supply,
-                    Ath = EXCLUDED.Ath,
-                    Ath_Change_Percentage = EXCLUDED.Ath_Change_Percentage
-                ''',
+                """,
                 [tuple(row) for row in df.values],
-                page_size= len(df)
+                page_size=len(df)
             )
+
             conn.commit()
             print("Datos cargados correctamente")
     except Exception as e:
@@ -177,7 +174,7 @@ def cargar_datos(df):
         print(e)
 
 #esto hace que sea un bucle infinito que cosnulta informacion cada 3 horas, si no es lo que se busca se puede eliminar el while true y corre una vez
-# tambien se puede hacer (24*60*60) para que sea todo el día, decir en comentarios de retroalimentación si se prefiere que la cosulta sea diaria o esta bien que se haga cada 3 horas
+# tambien se puede hacer (24*60*60) para que sea todo el día, decir en comentarios de retroalimentación si se prefiere que la cosulta sea diaria o esta bien que se haga cada 3 horas y update
 while True:
       process_data()
       time.sleep(3 * 60 * 60)
